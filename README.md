@@ -41,7 +41,7 @@ humanorbot/
 ## Dataset
 
 Any CSV with a `text` column and a `label` (0 = human, 1 = AI) or `generated` column.
-Default: Kaggle **"LLM - Detect AI Generated Text Dataset"** (sunilthite), about 29k essays. We use a class-balanced 10,000-row sample (`--max-rows 10000`): 8,000 train / 2,000 test.
+Default: Kaggle **"LLM - Detect AI Generated Text Dataset"** (sunilthite), `Training_Essay_Data.csv`: 27,282 essays after removing duplicates (16,098 human, 11,184 AI; human essays average 419 words, AI essays 307). We use a class-balanced 10,000-row sample (`--max-rows 10000`): 8,000 train / 2,000 test.
 
 ## Running on Kaggle
 
@@ -59,7 +59,7 @@ Default: Kaggle **"LLM - Detect AI Generated Text Dataset"** (sunilthite), about
    ```python
    !python src/train.py --data /kaggle/input/<dataset-folder>/<file>.csv --max-rows 1000 --out /kaggle/working/test_run
    ```
-5. **Full run** (roughly 1–1.5 hours on a T4). Use **Save Version → Save & Run All** so it keeps running after you close the tab:
+5. **Full run** (about 30 minutes on a T4: 22 min training + 2 × ~100 s evaluation). Use **Save Version → Save & Run All** so it keeps running after you close the tab:
    ```python
    !python src/train.py --data /kaggle/input/<dataset-folder>/<file>.csv --max-rows 10000 --out /kaggle/working/outputs
    ```
@@ -91,12 +91,24 @@ Accuracy, precision, recall, F1 (AI = positive class), ROC-AUC, confusion matrix
 
 ## Results
 
-*(Fill in from `results.json` after the Kaggle run.)*
+Full run on Kaggle (GPU T4, 19 Nov 2026): 8,000 training / 2,000 test essays (balanced), 1 epoch. LoRA fine-tuning took 22 minutes; evaluating 2,000 essays takes about 100 seconds per model.
 
 | Model | Accuracy | Precision | Recall | F1 | ROC-AUC |
 |---|---|---|---|---|---|
-| Base (zero-shot) | | | | | |
-| Fine-tuned (LoRA) | | | | | |
+| Base (zero-shot) | 0.4930 | 0.1500 | 0.0030 | 0.0059 | 0.2382 |
+| Fine-tuned (LoRA) | **0.9975** | **0.9980** | **0.9970** | **0.9975** | **1.0000** |
+
+Confusion matrices on the 2,000 test essays (AI = positive):
+
+| Model | True human (TN) | False AI (FP) | Missed AI (FN) | Caught AI (TP) |
+|---|---|---|---|---|
+| Base | 983 | 17 | 997 | 3 |
+| Fine-tuned | 998 | 2 | 3 | 997 |
+
+**Observations**
+- The base model answers "Human" for almost every essay: it catches 3 of 1,000 AI essays. Its ROC-AUC below 0.5 means its scores are ranked *backwards*: it rates human essays as more AI-like than AI essays.
+- Training only 0.28% of the parameters (4.4M LoRA weights) for 22 minutes takes the same model to 5 errors out of 2,000.
+- The training loss reached about 0 within 150 steps, so this dataset is easy to separate once trained. The near-perfect score probably reflects this dataset (a limited set of essay prompts and generators) more than general AI-text detection; it should be checked on text from other sources before drawing wider conclusions.
 
 ## Front end (later)
 
