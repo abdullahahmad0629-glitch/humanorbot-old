@@ -20,6 +20,9 @@ outputs/
 *.pkl
 *.h5
 
+# ...except our trained LoRA adapter (about 17 MB), kept in model/
+!model/lora_adapter/*.safetensors
+
 # Web page (React)
 web/node_modules/
 web/dist/
