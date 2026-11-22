@@ -1,14 +1,17 @@
 # humanorbot: Base vs. Fine-Tuned Small Language Model for AI-Text Detection
 
 **Course project, Fine-Tuning Small Language Models category.**
-We take a pretrained small language model, **Qwen2.5-1.5B-Instruct**, and ask it whether a text was written by a human or an AI:
+We take a pretrained small language model, **Qwen2.5-1.5B-Instruct**, and ask it whether a text was written by a human or an AI, first as it is (base model) and then after LoRA fine-tuning.
+
+**Try it:** https://abdullahahmad0629-glitch.github.io/humanorbot/ (the model server must be running; see [Web demo](#web-demo)).
 
 | | Base model | Fine-tuned model |
 |---|---|---|
 | Model | Qwen2.5-1.5B-Instruct | Same model + LoRA adapters |
 | Training | None (zero-shot) | LoRA (PEFT) on our training split |
-| Trainable parameters | 0 | ~4.4M (≈0.3% of 1.5B) |
+| Trainable parameters | 0 | 4.4M (0.28% of 1.5B) |
 | Test set | Same held-out 20% split | Same held-out 20% split |
+| Accuracy on 2,000 test essays | 0.493 | **0.9975** |
 
 **Research question:** does fine-tuning actually improve AI-text detection compared with the base model?
 
@@ -29,11 +32,18 @@ Team: Abdullah Ahmad, Eshaal Yasir
 
 ```
 humanorbot/
-├── data/sample.csv        # 100 demo sentences, for quick code checks only
+├── data/sample.csv              # 100 demo sentences, for quick code checks only
 ├── src/
-│   ├── preprocess.py      # cleaning + fixed 80/20 split (seed 42)
-│   ├── train.py           # base evaluation, LoRA fine-tuning, fine-tuned evaluation
-│   └── predict.py         # classify new text with both models (JSON output)
+│   ├── preprocess.py            # cleaning + fixed 80/20 split (seed 42)
+│   ├── train.py                 # base evaluation, LoRA fine-tuning, fine-tuned evaluation
+│   ├── predict.py               # classify new text with both models (JSON output)
+│   ├── test_other_dataset.py    # test both models on a different dataset (HC3)
+│   └── app.py                   # web API (FastAPI) used by the web page
+├── kaggle/
+│   ├── humanorbot_train.ipynb   # Kaggle notebook: clones this repo, short test, full run
+│   └── api_server.py            # Kaggle cell: runs app.py on the GPU + public tunnel
+├── web/                         # React page (Vite), published on GitHub Pages
+├── .github/workflows/deploy.yml # builds web/ and publishes it
 ├── requirements.txt
 └── README.md
 ```
@@ -45,23 +55,21 @@ Default: Kaggle **"LLM - Detect AI Generated Text Dataset"** (sunilthite), `Trai
 
 ## Running on Kaggle
 
-1. **New Notebook** → Settings: **Accelerator: GPU T4** (or P100), **Internet: On**.
-2. **Add Input** → search for the dataset above and add it.
-3. Clone this private repo using a read-only GitHub token saved in **Add-ons → Secrets** as `GITHUB_TOKEN` (never paste the token into a cell):
+1. **New Notebook** → Settings: **Accelerator: GPU T4**, **Internet: On**.
+2. **Add Input** → the dataset above.
+3. Either import `kaggle/humanorbot_train.ipynb` (File → Import Notebook; it does all the steps below), or clone this repo yourself:
    ```python
-   from kaggle_secrets import UserSecretsClient
-   token = UserSecretsClient().get_secret("GITHUB_TOKEN")
-   !git clone https://{token}@github.com/abdullahahmad0629-glitch/humanorbot.git
+   !git clone https://github.com/abdullahahmad0629-glitch/humanorbot.git
    %cd humanorbot
    !pip install -q -U peft
    ```
-4. **Short test first** (a few minutes):
+4. **Short test first** (about 5 minutes):
    ```python
-   !python src/train.py --data /kaggle/input/<dataset-folder>/<file>.csv --max-rows 1000 --out /kaggle/working/test_run
+   !python src/train.py --data /kaggle/input/<dataset-folder>/Training_Essay_Data.csv --max-rows 1000 --out /kaggle/working/test_run
    ```
 5. **Full run** (about 30 minutes on a T4: 22 min training + 2 × ~100 s evaluation). Use **Save Version → Save & Run All** so it keeps running after you close the tab:
    ```python
-   !python src/train.py --data /kaggle/input/<dataset-folder>/<file>.csv --max-rows 10000 --out /kaggle/working/outputs
+   !python src/train.py --data /kaggle/input/<dataset-folder>/Training_Essay_Data.csv --max-rows 10000 --out /kaggle/working/outputs
    ```
 6. **Try it:**
    ```python
@@ -71,7 +79,7 @@ Default: Kaggle **"LLM - Detect AI Generated Text Dataset"** (sunilthite), `Trai
 Outputs in `/kaggle/working/outputs/`:
 - `results.json`: metrics for both models
 - `test_predictions.csv`: every test text with `base_ai_prob` and `finetuned_ai_prob`, for the false positive / false negative analysis
-- `lora_adapter/`: the trained adapter (only about 17 MB)
+- `lora_adapter/`: the trained adapter (about 17 MB)
 
 ### Settings
 
@@ -110,9 +118,33 @@ Confusion matrices on the 2,000 test essays (AI = positive):
 - Training only 0.28% of the parameters (4.4M LoRA weights) for 22 minutes takes the same model to 5 errors out of 2,000.
 - The training loss reached about 0 within 150 steps, so this dataset is easy to separate once trained. The near-perfect score probably reflects this dataset (a limited set of essay prompts and generators) more than general AI-text detection; it should be checked on text from other sources before drawing wider conclusions.
 
-## Front end (later)
+### Error analysis
 
-`Predictor` in `src/predict.py` returns JSON, so a small API (e.g. FastAPI) can wrap it for the React front end.
+- **Base model:** 11 of its 17 false positives are "Face on Mars" essays, so its few "AI" answers follow the topic, not the writing style. Of its 100 highest-scored essays, 89 are human.
+- **Fine-tuned model:** 3 false negatives (two "AI" essays full of typos, possibly mislabelled) and 2 false positives (unusually polished human essays). Strong or formulaic human writers getting flagged is the classic risk of AI detectors.
+
+### Testing on a different dataset (optional)
+
+`src/test_other_dataset.py` scores both models on **HC3** (human vs ChatGPT answers from Reddit ELI5, finance, medicine, open questions and Wikipedia CS) without retraining:
+
+```python
+!python src/test_other_dataset.py --models-dir /kaggle/working/outputs
+```
+
+## Web demo
+
+| Part | Where |
+|---|---|
+| Page: model dropdown, text box, label + score, server-address box | `web/`, published on GitHub Pages |
+| API: `POST /predict` with `{"text": "...", "model": "base" or "finetuned"}` → `{"label", "ai_probability"}` | `src/app.py` |
+| Server on a free GPU + public address | `kaggle/api_server.py` (Kaggle + free Cloudflare quick tunnel) |
+
+To use it:
+1. Make a Kaggle notebook with **GPU T4**, **Internet on**, and the training notebook's output added as input. Paste `kaggle/api_server.py` into a cell.
+2. **Save Version → Save & Run All**. After 2–3 minutes the log shows `API ADDRESS: https://….trycloudflare.com`.
+3. Paste that address into the page's **Model server address** box (or open `https://abdullahahmad0629-glitch.github.io/humanorbot/?api=<address>`).
+
+The server stops itself after **20 minutes without requests** or **90 minutes in total**, so it can't use up the weekly GPU hours. Once loaded, a check takes about 0.4 seconds.
 
 ## Team workflow
 
