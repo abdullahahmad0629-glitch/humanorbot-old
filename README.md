@@ -38,7 +38,6 @@ humanorbot/
 │   ├── preprocess.py            # cleaning + fixed 80/20 split (seed 42)
 │   ├── train.py                 # base evaluation, LoRA fine-tuning, fine-tuned evaluation
 │   ├── predict.py               # classify new text with both models (JSON output)
-│   ├── test_other_dataset.py    # test both models on a different dataset (HC3)
 │   └── app.py                   # web API (FastAPI) used by the web page
 ├── kaggle/
 │   ├── humanorbot_train.ipynb   # Kaggle notebook: clones this repo, short test, full run
@@ -134,14 +133,6 @@ Confusion matrices on the 2,000 test essays (AI = positive):
 
 - **Base model:** 11 of its 17 false positives are "Face on Mars" essays, so its few "AI" answers follow the topic, not the writing style. Of its 100 highest-scored essays, 89 are human.
 - **Fine-tuned model:** 3 false negatives (two "AI" essays full of typos, possibly mislabelled) and 2 false positives (unusually polished human essays). Strong or formulaic human writers getting flagged is the classic risk of AI detectors.
-
-### Testing on a different dataset (optional)
-
-`src/test_other_dataset.py` scores both models on **HC3** (human vs ChatGPT answers from Reddit ELI5, finance, medicine, open questions and Wikipedia CS) without retraining:
-
-```python
-!python src/test_other_dataset.py --models-dir /kaggle/working/outputs
-```
 
 ## Web demo
 
