@@ -33,6 +33,7 @@ Team: Abdullah Ahmad, Eshaal Yasir
 ```
 humanorbot/
 ├── data/sample.csv              # 100 demo sentences, for quick code checks only
+├── model/                       # our trained LoRA adapter (17 MB) + results.json
 ├── src/
 │   ├── preprocess.py            # cleaning + fixed 80/20 split (seed 42)
 │   ├── train.py                 # base evaluation, LoRA fine-tuning, fine-tuned evaluation
@@ -47,6 +48,17 @@ humanorbot/
 ├── requirements.txt
 └── README.md
 ```
+
+## Trained model
+
+`model/` holds our trained LoRA adapter (`model/lora_adapter/`, 17 MB, 4,358,144 trained weights) and `results.json` from the full run. The base model, Qwen2.5-1.5B-Instruct (about 3 GB), is downloaded from Hugging Face automatically, so you can use the fine-tuned detector without training:
+
+```
+pip install -r requirements.txt
+python src/predict.py --models-dir model "Paste any paragraph here"
+```
+
+A GPU is recommended; on a CPU each prediction takes several seconds.
 
 ## Dataset
 
